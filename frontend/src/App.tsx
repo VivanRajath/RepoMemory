@@ -31,6 +31,10 @@ export default function App() {
   const [toast, setToast] = useState('')
 
   const refresh = useCallback(async () => {
+    api.get<{ id: string; model: string; available: boolean }[]>('/api/models').then((m) => {
+      setModels(m)
+      setModel((cur) => (m.find((x) => x.id === cur && x.available) ? cur : m.find((x) => x.available)?.id ?? cur))
+    }).catch(() => {})
     const s = await api.get<State>('/api/state')
     setState(s)
     if (!s.project) return
@@ -48,12 +52,9 @@ export default function App() {
 
   useEffect(() => {
     refresh()
-    api.get<typeof models>('/api/models').then((m) => {
-      setModels(m)
-      const firstAvail = m.find((x) => x.available)
-      if (firstAvail) setModel(firstAvail.id)
-    })
-  }, [refresh])
+    const retry = setInterval(() => { if (!models.length) refresh() }, 4000) // backend may still be starting
+    return () => clearInterval(retry)
+  }, [refresh, models.length])
 
   useEffect(() => {
     let ws: WebSocket
@@ -62,8 +63,12 @@ export default function App() {
       ws = new WebSocket(wsUrl('/ws/progress'))
       ws.onmessage = (e) => {
         const m: ProgressMsg = JSON.parse(e.data)
-        setLog((l) => [...l.slice(-300), m])
-        if (m.type === 'start') setIngesting(true)
+        setLog((l) => (m.type === 'start' ? [m] : [...l.slice(-300), m]))
+        if (m.type === 'start') {
+          setIngesting(true)
+          setGraph({ nodes: [], rels: [] }); setFiles([]); setChanged([]); setAnswer(null)
+          setHighlight(null); setOpenFile(null); setState({ project: m.project })
+        }
         if (m.type === 'done' || m.type === 'error') { setIngesting(false); refresh() }
         if (m.type === 'nodes' && m.uids) {
           refresh()

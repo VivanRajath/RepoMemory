@@ -39,7 +39,7 @@ function AnswerText({ text, nodeById, onCite }: { text: string; nodeById: Map<st
 }
 
 export default function AskPanel({ model, setModel, models, nodeById, onAnswer, onCite, disabled }: Props) {
-  const [question, setQuestion] = useState('Why did we change auth, and could it cause this 401 on /api/orders?')
+  const [question, setQuestion] = useState('')
   const [trace, setTrace] = useState('')
   const [showTrace, setShowTrace] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -68,6 +68,7 @@ export default function AskPanel({ model, setModel, models, nodeById, onAnswer, 
         onChange={(e) => setQuestion(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) ask() }}
         rows={3}
+        placeholder="Ask about this repo, e.g. why did we change auth, and could it cause this 401 on /api/orders?"
         className="w-full rounded border border-slate-700 bg-slate-900 p-2 text-sm outline-none focus:border-blue-500"
       />
       <button onClick={() => setShowTrace(!showTrace)} className="self-start text-xs text-slate-400 hover:text-slate-200">

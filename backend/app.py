@@ -114,6 +114,7 @@ def full_ingest(url: str, reset: bool = False):
             clear_project(project)
             log("reset: cleared graph")
         repo_dir = clone(url, log, reset=reset)
+        set_current(project, repo_dir, url)
         code = ingest_code(project, url, repo_dir, log)
         commits = ingest_git(project, repo_dir, log)
         paths = list_files(repo_dir)

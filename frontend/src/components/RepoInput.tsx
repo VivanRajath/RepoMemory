@@ -67,7 +67,6 @@ export default function RepoInput({ log, ingesting, current, files, changed, ope
   const [err, setErr] = useState('')
   const logRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => { if (!url && current.url) setUrl(current.url) }, [current.url, url])
   useEffect(() => { logRef.current?.scrollTo(0, logRef.current.scrollHeight) }, [log])
 
   const ingest = async () => {
