@@ -3,6 +3,7 @@ import math
 from datetime import datetime, timezone
 
 import tiktoken
+from neo4j.exceptions import ServiceUnavailable, SessionExpired
 
 from graph import run, session, uid
 from ingest.code_ingest import component_key
@@ -99,6 +100,10 @@ def find_seeds(project: str, q: dict, s) -> tuple[dict, dict, Candidates]:
         cands.add(_node(p.nodes[0]), 0, _path(p), seed=True)
     for r in s.run("MATCH (c:Component) WHERE c.uid IN $cs RETURN c", cs=list(seed_comps)):
         cands.add(_node(r["c"]), 0, {"nodes": [r["c"]["uid"]], "rels": []}, seed=True, why=seed_comps[r["c"]["uid"]])
+    if not seed_comps and not seed_files:  # general question ("what's in this repo?"): overview of all components
+        for r in s.run("MATCH (c:Component {project: $p}) RETURN c", p=project):
+            seed_comps[r["c"]["uid"]] = "repo overview"
+            cands.add(_node(r["c"]), 0, {"nodes": [r["c"]["uid"]], "rels": []}, seed=True, why="repo overview")
     comp_dist = {c: 0 for c in seed_comps}
     return seed_files, comp_dist, cands
 
@@ -208,6 +213,13 @@ def build_sections(project: str, q: dict, question: str, stack_trace: str, cands
         line = f"- {_cite(n['uid'])} component `{n['path'] or '(root)'}` ({role})"
         if seed_files:
             line += " — relevant files: " + ", ".join(f"{_cite(uid('file', project, p))} {p}" for p in seed_files)
+        elif c.get("why") == "repo overview":
+            files = run("""MATCH (:Component {uid: $u})-[:CONTAINS]->(f:File) WHERE NOT coalesce(f.deleted, false)
+                           OPTIONAL MATCH (f)-[:DEFINES]->(s:Symbol)
+                           RETURN f.uid AS uid, f.path AS path, collect(s.kind + ' ' + s.name)[..6] AS syms
+                           ORDER BY f.path LIMIT 20""", u=n["uid"])
+            for f in files:
+                line += f"\n  - {_cite(f['uid'])} {f['path']}" + (f" ({', '.join(f['syms'])})" if f["syms"] else "")
         items["components"].append((10 - c["hop"], line, [n["uid"]]))
 
     ids = list(cands.items)
@@ -365,6 +377,13 @@ def repo_tokens_estimate(project: str) -> int:
 
 
 def retrieve(project: str, question: str, stack_trace: str = "", budget: int = 1500) -> dict:
+    try:
+        return _retrieve(project, question, stack_trace, budget)
+    except (SessionExpired, ServiceUnavailable):  # Aura dropped an idle connection; the retry gets a fresh one
+        return _retrieve(project, question, stack_trace, budget)
+
+
+def _retrieve(project: str, question: str, stack_trace: str = "", budget: int = 1500) -> dict:
     q = parse(project, question, stack_trace)
     with session() as s:
         seed_files, comp_dist, cands = find_seeds(project, q, s)

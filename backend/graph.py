@@ -5,6 +5,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from neo4j import GraphDatabase
+from neo4j.exceptions import ServiceUnavailable, SessionExpired
 
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
@@ -16,6 +17,10 @@ driver = GraphDatabase.driver(
     os.getenv("NEO4J_URI", "bolt://localhost:7687"),
     auth=(os.getenv("NEO4J_USER", "neo4j"), os.getenv("NEO4J_PASSWORD", "repomemory")),
     notifications_min_severity="OFF",
+    # AuraDB drops idle connections; check before reuse and recycle them regularly
+    liveness_check_timeout=30,
+    max_connection_lifetime=300,
+    keep_alive=True,
 )
 
 # AuraDB: NEO4J_URI=neo4j+s://<id>.databases.neo4j.io, NEO4J_DATABASE usually "neo4j" (or the instance id)
@@ -47,8 +52,13 @@ def init_schema():
 
 
 def run(query: str, **params) -> list[dict]:
-    with session() as s:
-        return [r.data() for r in s.run(query, **params)]
+    for attempt in (1, 2):  # one retry if Aura dropped the connection
+        try:
+            with session() as s:
+                return [r.data() for r in s.run(query, **params)]
+        except (SessionExpired, ServiceUnavailable):
+            if attempt == 2:
+                raise
 
 
 def write_batch(query: str, rows: list[dict], size: int = 500, **params):
