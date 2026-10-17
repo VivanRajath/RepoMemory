@@ -2,7 +2,7 @@
 from pathlib import Path
 
 from graph import run, uid
-from ingest.code_ingest import derive_component_deps, list_files, parse_file, write_files
+from ingest.code_ingest import derive_component_deps, list_files, parse_file, write_files, write_tree
 from ingest.deps_ingest import is_manifest, write_bumps, write_current_deps
 from ingest.git_ingest import read_commits, write_cochange, write_commits
 
@@ -16,6 +16,7 @@ def ingest_commit(project: str, repo_dir: Path, sha: str, log=print) -> dict:
 
     parsed = [parse_file(repo_dir, p, present) for p in changed if p in present]
     write_files(project, parsed)
+    write_tree(project, [r["path"] for r in parsed])
     gone = [uid("file", project, p) for p in changed if p not in present]
     run("UNWIND $u AS x MATCH (f:File {uid: x}) SET f.deleted = true", u=gone)
     derive_component_deps(project)

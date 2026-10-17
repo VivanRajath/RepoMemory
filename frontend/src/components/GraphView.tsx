@@ -6,7 +6,7 @@ import { LABEL_COLORS, nodeCaption } from '../api'
 import type { GNode, Graph } from '../api'
 
 const SIZES: Record<string, number> = {
-  Project: 40, Component: 32, Decision: 26, Bug: 26, Fix: 24, FailedAttempt: 24, TestRun: 22,
+  Project: 40, Directory: 20, Component: 32, Decision: 26, Bug: 26, Fix: 24, FailedAttempt: 24, TestRun: 22,
   Dependency: 22, File: 16, Commit: 14, Developer: 16,
 }
 const DIM = '#1e293b'
@@ -32,7 +32,7 @@ export default function GraphView({ graph, highlight, flash, focusUid, onClearHi
 
   const { nodes, rels } = useMemo(() => {
     const keep = graph.nodes.filter(
-      (n) => showNoise || !['File', 'Commit', 'Developer'].includes(n.label) || highlight?.nodes.has(n.uid) || flash.has(n.uid),
+      (n) => showNoise || !['File', 'Directory', 'Commit', 'Developer'].includes(n.label) || highlight?.nodes.has(n.uid) || flash.has(n.uid),
     )
     const ids = new Set(keep.map((n) => n.uid))
     const nodes: Node[] = keep.map((n) => {

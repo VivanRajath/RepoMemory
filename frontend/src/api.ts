@@ -45,6 +45,7 @@ export const wsUrl = (path: string) => `${location.protocol === 'https:' ? 'wss'
 
 export const LABEL_COLORS: Record<string, string> = {
   Project: '#94a3b8',
+  Directory: '#0ea5e9',
   Component: '#3b82f6',
   File: '#64748b',
   Dependency: '#a855f7',
@@ -62,6 +63,7 @@ export function nodeCaption(n: GNode): string {
   const cut = (s: string | undefined, k = 34) => (s && s.length > k ? s.slice(0, k - 1) + '…' : s ?? '')
   switch (n.label) {
     case 'Project': return p.name
+    case 'Directory': return p.name + '/'
     case 'Component': return p.path || '(root)'
     case 'File': return (p.path as string)?.split('/').pop() ?? ''
     case 'Dependency': return `${p.name}${p.current_version ? ' ' + p.current_version : ''}`

@@ -31,7 +31,7 @@ def session():
     return driver.session(database=DATABASE)
 
 
-LABELS = ["Project", "Component", "File", "Symbol", "Dependency", "Commit", "Developer",
+LABELS = ["Project", "Directory", "Component", "File", "Symbol", "Dependency", "Commit", "Developer",
           "Decision", "Bug", "Fix", "FailedAttempt", "TestRun"]
 
 SCHEMA = [

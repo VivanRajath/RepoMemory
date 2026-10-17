@@ -256,6 +256,32 @@ def write_files(project: str, parsed: list[dict], roots: dict[str, str] | None =
         MERGE (a)-[:IMPORTS]->(b)""", imp_rows, p=project)
 
 
+def write_tree(project: str, paths: list[str]):
+    """Folder hierarchy: (Project)-[:CONTAINS]->(Directory)-[:CONTAINS]->(Directory|File)."""
+    pid = uid("project", project, project)
+    dirs, links = {}, []
+    for p in paths:
+        parts = p.split("/")
+        parent = pid
+        for i in range(1, len(parts)):
+            d = "/".join(parts[:i])
+            did = uid("dir", project, d)
+            if d not in dirs:
+                dirs[d] = {"uid": did, "path": d, "name": parts[i - 1]}
+                links.append({"a": parent, "b": did})
+            parent = did
+        links.append({"a": parent, "b": uid("file", project, p)})
+    write_batch("""UNWIND $rows AS row MERGE (d:Directory {uid: row.uid})
+                   SET d.path = row.path, d.name = row.name, d.project = $p""", list(dirs.values()), p=project)
+    # split by label so every MATCH uses a uid index (unlabeled lookups are full scans)
+    for a_label in ("Project", "Directory"):
+        for b_label in ("Directory", "File"):
+            rows = [l for l in links if l["a"].startswith(a_label.lower()[:3] if a_label == "Directory" else "project")
+                    and l["b"].startswith("dir:" if b_label == "Directory" else "file:")]
+            write_batch(f"""UNWIND $rows AS row MATCH (a:{a_label} {{uid: row.a}}), (b:{b_label} {{uid: row.b}})
+                            MERGE (a)-[:CONTAINS]->(b)""", rows)
+
+
 def derive_component_deps(project: str):
     run("""MATCH (c:Component {project: $p})-[r:DEPENDS_ON]->() DELETE r""", p=project)
     run("""MATCH (c1:Component {project: $p})-[:CONTAINS]->(:File)-[:IMPORTS]->(:File)<-[:CONTAINS]-(c2:Component)
@@ -281,6 +307,7 @@ def ingest_code(project: str, url: str, repo_dir: Path, log=print) -> dict:
     roots = compute_roots([r["path"] for r in parsed if r["language"]])
     run("MATCH (p:Project {uid: $u}) SET p.component_roots = $r", u=uid("project", project, project), r=json.dumps(roots))
     write_files(project, parsed, roots)
+    write_tree(project, [r["path"] for r in parsed])
     derive_component_deps(project)
     source_chars = sum(r["chars"] for r in parsed if r["language"])
     run("MATCH (p:Project {uid: $uid}) SET p.source_chars = $c", uid=uid("project", project, project), c=source_chars)

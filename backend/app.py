@@ -173,7 +173,7 @@ def api_models():
 
 # ---------- graph for the UI ----------
 
-GRAPH_LABELS = ["Project", "Component", "File", "Dependency", "Commit", "Developer", "Decision", "Bug", "Fix",
+GRAPH_LABELS = ["Project", "Directory", "Component", "File", "Dependency", "Commit", "Developer", "Decision", "Bug", "Fix",
                 "FailedAttempt", "TestRun"]
 
 
