@@ -75,4 +75,10 @@ def uid(kind: str, project: str, key: str) -> str:
 
 
 def clear_project(project: str):
-    run("MATCH (n {project: $p}) DETACH DELETE n", p=project)
+    run("MATCH (n {project: $p}) CALL { WITH n DETACH DELETE n } IN TRANSACTIONS OF 2000 ROWS", p=project)
+
+
+def clear_all():
+    """One repo at a time: drop every node from previous ingests (incl. legacy project-less Developers)."""
+    labels = "|".join(LABELS)
+    run(f"MATCH (n:{labels}) CALL {{ WITH n DETACH DELETE n }} IN TRANSACTIONS OF 2000 ROWS")

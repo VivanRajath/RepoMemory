@@ -57,13 +57,13 @@ def read_commits(repo_dir: Path, rev: str = "HEAD", max_count: int = MAX_COMMITS
 
 def write_commits(project: str, commits: list[dict]):
     rows = [{"uid": uid("commit", project, c["sha"]), "sha": c["sha"], "msg": c["msg"], "ts": c["ts"],
-             "author": c["author"], "dev": uid("dev", "", c["email"].lower()), "email": c["email"]}
+             "author": c["author"], "dev": uid("dev", project, c["email"].lower()), "email": c["email"]}
             for c in commits]
     write_batch("""UNWIND $rows AS row
         MERGE (c:Commit {uid: row.uid})
         SET c.sha = row.sha, c.short = left(row.sha, 7), c.msg = row.msg, c.ts = row.ts,
             c.author = row.author, c.project = $p
-        MERGE (d:Developer {uid: row.dev}) SET d.name = row.author, d.email = row.email
+        MERGE (d:Developer {uid: row.dev}) SET d.name = row.author, d.email = row.email, d.project = $p
         MERGE (c)-[:AUTHORED_BY]->(d)""", rows, p=project)
     mods = [{"c": uid("commit", project, c["sha"]), "f": uid("file", project, f["path"]), "path": f["path"],
              "added": f["added"], "removed": f["removed"]} for c in commits for f in c["files"]]

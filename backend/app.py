@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 import llm
 import workspace
-from graph import WORKSPACE_DIR, clear_project, init_schema, run, uid
+from graph import WORKSPACE_DIR, clear_all, init_schema, run, uid
 from ingest.code_ingest import ingest_code, list_files
 from ingest.deps_ingest import ingest_deps
 from ingest.git_ingest import clone, ingest_git, repo_name
@@ -110,9 +110,8 @@ def full_ingest(url: str, reset: bool = False):
         t0 = time.time()
         project = repo_name(url)
         hub.emit({"type": "start", "project": project})
-        if reset:
-            clear_project(project)
-            log("reset: cleared graph")
+        clear_all()  # the graph only ever holds the repo being ingested: no stale nodes
+        log("graph: cleared previous data")
         repo_dir = clone(url, log, reset=reset)
         set_current(project, repo_dir, url)
         code = ingest_code(project, url, repo_dir, log)
