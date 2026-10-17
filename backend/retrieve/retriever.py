@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import tiktoken
 
-from graph import driver, run, uid
+from graph import run, session, uid
 from ingest.code_ingest import component_key
 from retrieve.parse_query import parse
 
@@ -366,7 +366,7 @@ def repo_tokens_estimate(project: str) -> int:
 
 def retrieve(project: str, question: str, stack_trace: str = "", budget: int = 1500) -> dict:
     q = parse(project, question, stack_trace)
-    with driver.session() as s:
+    with session() as s:
         seed_files, comp_dist, cands = find_seeds(project, q, s)
         expand(project, q, seed_files, comp_dist, cands, s)
     now_ts = (run("MATCH (c:Commit {project: $p}) RETURN max(c.ts) AS t", p=project) or [{"t": 0}])[0]["t"] or 0

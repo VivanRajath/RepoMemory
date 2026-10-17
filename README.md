@@ -11,7 +11,8 @@ Only a small, token-budgeted package goes to the LLM, and every claim must cite 
 
 ```bash
 cp .env.example .env            # add GROQ_API_KEY / ANTHROPIC_API_KEY / OPENAI_API_KEY
-docker compose up -d            # Neo4j 5 + APOC (http://localhost:7474, neo4j/repomemory)
+docker compose up -d            # local Neo4j 5 + APOC, OR use AuraDB: put its neo4j+s:// URI,
+                                # user, password and NEO4J_DATABASE in .env and skip docker
 
 cd backend
 python -m venv .venv && .venv/Scripts/pip install -r requirements.txt   # .venv/bin/pip on macOS/Linux

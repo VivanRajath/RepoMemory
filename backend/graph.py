@@ -18,6 +18,14 @@ driver = GraphDatabase.driver(
     notifications_min_severity="OFF",
 )
 
+# AuraDB: NEO4J_URI=neo4j+s://<id>.databases.neo4j.io, NEO4J_DATABASE usually "neo4j" (or the instance id)
+DATABASE = os.getenv("NEO4J_DATABASE") or None
+
+
+def session():
+    return driver.session(database=DATABASE)
+
+
 LABELS = ["Project", "Component", "File", "Symbol", "Dependency", "Commit", "Developer",
           "Decision", "Bug", "Fix", "FailedAttempt", "TestRun"]
 
@@ -33,19 +41,19 @@ SCHEMA = [
 
 
 def init_schema():
-    with driver.session() as s:
+    with session() as s:
         for q in SCHEMA:
             s.run(q)
 
 
 def run(query: str, **params) -> list[dict]:
-    with driver.session() as s:
+    with session() as s:
         return [r.data() for r in s.run(query, **params)]
 
 
 def write_batch(query: str, rows: list[dict], size: int = 500, **params):
     """Run `UNWIND $rows AS row ...` in chunks."""
-    with driver.session() as s:
+    with session() as s:
         for i in range(0, len(rows), size):
             s.run(query, rows=rows[i:i + size], **params).consume()
 
