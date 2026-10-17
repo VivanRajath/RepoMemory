@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+neo4j
+GitPython
+tree-sitter
+tree-sitter-language-pack
+litellm
+sentence-transformers
+tiktoken
+python-dotenv
+numpy
+ptyprocess; sys_platform != "win32"
+pywinpty; sys_platform == "win32"

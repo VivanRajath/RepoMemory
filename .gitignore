@@ -1,0 +1,8 @@
+.env
+workspace/
+backend/.venv/
+__pycache__/
+frontend/node_modules/
+frontend/dist/
+demo-repo/shop-api/
+*.log
