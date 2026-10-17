@@ -6,7 +6,7 @@ import re
 import litellm
 
 MODELS = {
-    "groq": os.getenv("GROQ_MODEL", "groq/llama-3.3-70b-versatile"),
+    "groq": os.getenv("GROQ_MODEL", "groq/openai/gpt-oss-120b"),
     "claude": os.getenv("CLAUDE_MODEL", "anthropic/claude-opus-5-5"),
     "openai": os.getenv("OPENAI_MODEL", "openai/gpt-4.1-mini"),
 }
@@ -19,7 +19,7 @@ reasons, bugs, fixes, failed attempts, dependency changes, coupled files). You n
 
 Rules:
 - Answer ONLY from the package. If the package does not contain something, say so.
-- Cite every factual claim with the node id exactly as written, e.g. [node:decision:1a2b3c4d]. Never invent ids.
+- Cite every factual claim with the node id exactly as written, e.g. [node:decision:1a2b3c4d] (plain text, no bold). Never invent ids.
 - Say what is uncertain. If a fix has verified=false, say it is unverified.
 - If a failed attempt is relevant, warn against repeating it.
 - End with "Next step:" — one concrete debugging step.
@@ -36,7 +36,7 @@ def available_models() -> list[dict]:
 
 def _complete(model_key: str, system: str, user: str, json_mode=False) -> str:
     model = MODELS.get(model_key, model_key)
-    kwargs = {"max_tokens": 4000 if model.startswith("anthropic/") else 1200}
+    kwargs = {"max_tokens": 4000}  # reasoning models spend tokens before the answer
     if not model.startswith("anthropic/"):
         kwargs["temperature"] = 0.2  # current Claude models reject sampling params
     if json_mode and not model.startswith("anthropic/"):
@@ -46,8 +46,12 @@ def _complete(model_key: str, system: str, user: str, json_mode=False) -> str:
     return resp.choices[0].message.content or ""
 
 
+LOOSE_CITE_RE = re.compile(r"\[[*_`\s]*node:\s*([A-Za-z]+:[0-9a-f]{8})[*_`\s]*\]")
+
+
 def check_citations(answer: str, valid_uids: set[str]) -> tuple[str, list[str], list[str]]:
     """Returns (answer with invalid citations flagged, valid cited uids, invalid uids)."""
+    answer = LOOSE_CITE_RE.sub(r"[node:\1]", answer)  # models sometimes bold/backtick citations
     cited, invalid = [], []
     for u in CITE_RE.findall(answer):
         (cited if u in valid_uids else invalid).append(u)

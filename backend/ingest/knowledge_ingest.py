@@ -14,7 +14,7 @@ import numpy as np
 from graph import run, uid, write_batch
 
 BATCH = 20
-KNOWLEDGE_MODEL = os.getenv("KNOWLEDGE_MODEL", "groq/llama-3.3-70b-versatile")
+KNOWLEDGE_MODEL = os.getenv("KNOWLEDGE_MODEL", "groq/openai/gpt-oss-120b")
 REVERT_RE = re.compile(r"This reverts commit ([0-9a-f]{7,40})")
 COMMENT_RE = re.compile(r"(?:#|//)\s*(HACK|FIXME|NOTE|XXX)\b[:\s]+(.+)")
 ERR_RE = re.compile(r"\b([1-5]\d\d)\b|\b([A-Z][A-Za-z]+(?:Error|Exception))\b")
