@@ -6,12 +6,13 @@ import tiktoken
 from neo4j.exceptions import ServiceUnavailable, SessionExpired
 
 from graph import run, session, uid
-from ingest.code_ingest import component_key
+from ingest.code_ingest import component_key, load_roots
 from retrieve.parse_query import parse
 
 ENC = tiktoken.get_encoding("cl100k_base")
 HALF_LIFE_DAYS = 90
-SECTIONS = ["question", "components", "decisions", "bugs", "failed_attempts", "dependency_changes", "coupled_files"]
+SECTIONS = ["question", "components", "code", "decisions", "bugs", "failed_attempts", "history",
+            "dependency_changes", "coupled_files"]
 
 # Expansion patterns from a Component `c`. The last node of each path is the candidate.
 # Each is 1-3 hops; component distance (0 for seeds, 1 for neighbours) is added on top.
@@ -204,12 +205,13 @@ def build_sections(project: str, q: dict, question: str, stack_trace: str, cands
         head += "\nPARSED SIGNALS: " + "; ".join(signals)
     items["question"].append((1e9, head, []))
 
+    roots = load_roots(project)
     comps = [c for c in cands.by_label("Component") if c["hop"] <= 1]
     for c in sorted(comps, key=lambda c: c["hop"]):
         n = c["node"]
         role = "seed" if c["hop"] == 0 else ("co-changed with seed" if c.get("cochange") else "dependency neighbour")
         seed_files = [f["node"]["path"] for f in cands.by_label("File") if f.get("seed")
-                      and component_key(f["node"]["path"]) == n["path"]]
+                      and component_key(f["node"]["path"], roots) == n["path"]]
         line = f"- {_cite(n['uid'])} component `{n['path'] or '(root)'}` ({role})"
         if seed_files:
             line += " — relevant files: " + ", ".join(f"{_cite(uid('file', project, p))} {p}" for p in seed_files)
@@ -221,6 +223,22 @@ def build_sections(project: str, q: dict, question: str, stack_trace: str, cands
             for f in files:
                 line += f"\n  - {_cite(f['uid'])} {f['path']}" + (f" ({', '.join(f['syms'])})" if f["syms"] else "")
         items["components"].append((10 - c["hop"], line, [n["uid"]]))
+
+    # Symbols and recent history of the seed files: lets any repo answer "how" and "why" without ADRs.
+    seed_file_ids = [f["node"]["uid"] for f in sorted(cands.by_label("File"), key=lambda f: f["hop"])
+                     if f.get("seed") and f["node"].get("language")][:8]
+    for r in run("""MATCH (f:File)-[:DEFINES]->(s:Symbol) WHERE f.uid IN $ids
+                    WITH f, s ORDER BY s.line
+                    RETURN f.uid AS uid, f.path AS path, collect(s.kind + ' ' + s.name + ':' + s.line)[..14] AS syms""",
+                 ids=seed_file_ids):
+        items["code"].append((5.0, f"- {_cite(r['uid'])} {r['path']}: " + ", ".join(r["syms"]), [r["uid"]]))
+    for r in run("""MATCH (c:Commit)-[m:MODIFIED]->(f:File) WHERE f.uid IN $ids
+                    WITH c, collect(f.path)[..3] AS paths ORDER BY c.ts DESC LIMIT 10
+                    RETURN c.uid AS uid, c.short AS short, c.ts AS ts, c.msg AS msg, c.author AS author, paths""",
+                 ids=seed_file_ids):
+        msg = " ".join(r["msg"].split())[:220]
+        items["history"].append((r["ts"] / 1e10, f"- {_cite(r['uid'])} {r['short']} ({_date(r['ts'])}, {r['author']}) "
+                                                f"[{', '.join(r['paths'])}]: {msg}", [r["uid"]]))
 
     ids = list(cands.items)
     for r in run("""MATCH (d:Decision) WHERE d.uid IN $ids
@@ -336,7 +354,8 @@ def build_sections(project: str, q: dict, question: str, stack_trace: str, cands
     return items
 
 
-TITLES = {"components": "SEED COMPONENTS", "decisions": "DECISIONS (with reasons)", "bugs": "BUGS + FIXES",
+TITLES = {"code": "CODE (symbols in the relevant files)", "history": "RECENT CHANGES TO THESE FILES (commit messages)",
+          "components": "SEED COMPONENTS", "decisions": "DECISIONS (with reasons)", "bugs": "BUGS + FIXES",
           "failed_attempts": "FAILED ATTEMPTS (do not repeat)", "dependency_changes": "DEPENDENCY CHANGES",
           "coupled_files": "COUPLED FILES (change together)"}
 

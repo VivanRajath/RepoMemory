@@ -29,7 +29,8 @@ def clone(url: str, log=print, reset: bool = False) -> Path:
             log(f"git: using existing clone at {dest}")
         return dest
     log(f"git: cloning {url}")
-    Repo.clone_from(url, dest)
+    # history beyond MAX_COMMITS is never read, so don't download it
+    Repo.clone_from(url, dest, multi_options=[f"--depth={MAX_COMMITS}", "--no-single-branch"] if "://" in url else [])
     return dest
 
 

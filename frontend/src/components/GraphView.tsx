@@ -25,6 +25,9 @@ export default function GraphView({ graph, highlight, flash, focusUid, onClearHi
   const [selected, setSelected] = useState<GNode | null>(null)
   const [showNoise, setShowNoise] = useState(true)
 
+  const big = graph.nodes.length > 250
+  useEffect(() => setShowNoise(!big), [big]) // big repos: hide files/commits unless highlighted
+
   const byId = useMemo(() => new Map(graph.nodes.map((n) => [n.uid, n])), [graph])
 
   const { nodes, rels } = useMemo(() => {

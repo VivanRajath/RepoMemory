@@ -1,4 +1,5 @@
 """Files, symbols, imports and components via tree-sitter (Python + JS/TS)."""
+import json
 import posixpath
 import re
 from pathlib import Path
@@ -30,13 +31,44 @@ def parser_for(lang):
     return _parsers[lang]
 
 
-def component_key(path: str) -> str:
+def compute_roots(code_paths: list[str]) -> dict[str, str]:
+    """Per top-level dir, the deepest single-chain directory all its code lives under.
+    src/flask/app.py + src/flask/json/x.py -> {"src": "src/flask"}; components are then that root's children."""
+    groups: dict[str, list[list[str]]] = {}
+    for p in code_paths:
+        parts = p.split("/")[:-1]
+        if parts:
+            groups.setdefault(parts[0], []).append(parts)
+    roots = {}
+    for top, dirs in groups.items():
+        prefix = dirs[0]
+        for d in dirs[1:]:
+            i = 0
+            while i < min(len(prefix), len(d)) and prefix[i] == d[i]:
+                i += 1
+            prefix = prefix[:i]
+        if len(prefix) == 1 and top in COMPONENT_ROOTS:
+            prefix = [top]  # app/auth, src/orders: children of the root are the components
+        roots[top] = "/".join(prefix)
+    return roots
+
+
+def component_key(path: str, roots: dict[str, str] | None = None) -> str:
     parts = path.split("/")
     if len(parts) == 1:
         return ""
-    if parts[0] in COMPONENT_ROOTS and len(parts) > 2:
-        return "/".join(parts[:2])
-    return parts[0]
+    if roots is None:  # fallback when a project's roots are unknown
+        if parts[0] in COMPONENT_ROOTS and len(parts) > 2:
+            return "/".join(parts[:2])
+        return parts[0]
+    root = roots.get(parts[0], parts[0])
+    rest = path[len(root) + 1:].split("/") if path.startswith(root + "/") else []
+    return f"{root}/{rest[0]}" if len(rest) > 1 else root
+
+
+def load_roots(project: str) -> dict[str, str] | None:
+    r = run("MATCH (p:Project {uid: $u}) RETURN p.component_roots AS r", u=uid("project", project, project))
+    return json.loads(r[0]["r"]) if r and r[0]["r"] else None
 
 
 def list_files(repo_dir: Path) -> list[str]:
@@ -180,12 +212,13 @@ def parse_file(repo_dir: Path, path: str, files: set[str]) -> dict:
 
 # ---------- writes ----------
 
-def write_files(project: str, parsed: list[dict]):
+def write_files(project: str, parsed: list[dict], roots: dict[str, str] | None = None):
     """Upsert File/Symbol/IMPORTS/Component for the given parsed files. Replaces their old symbols+imports."""
     pid = uid("project", project, project)
+    roots = roots if roots is not None else load_roots(project)
     comps, file_rows, sym_rows, imp_rows = {}, [], [], []
     for r in parsed:
-        ck = component_key(r["path"]) if r["language"] else None
+        ck = component_key(r["path"], roots) if r["language"] else None
         fid = uid("file", project, r["path"])
         if ck is not None:
             comps[ck] = {"uid": uid("comp", project, ck), "name": ck.split("/")[-1] if ck else "(root)", "path": ck}
@@ -245,11 +278,13 @@ def ingest_code(project: str, url: str, repo_dir: Path, log=print) -> dict:
             log(f"code: skip {p}: {e}")
         if i and i % 200 == 0:
             log(f"code: parsed {i}/{len(paths)}")
-    write_files(project, parsed)
+    roots = compute_roots([r["path"] for r in parsed if r["language"]])
+    run("MATCH (p:Project {uid: $u}) SET p.component_roots = $r", u=uid("project", project, project), r=json.dumps(roots))
+    write_files(project, parsed, roots)
     derive_component_deps(project)
     source_chars = sum(r["chars"] for r in parsed if r["language"])
     run("MATCH (p:Project {uid: $uid}) SET p.source_chars = $c", uid=uid("project", project, project), c=source_chars)
     n_sym = sum(len(r["symbols"]) for r in parsed)
-    n_comp = len({component_key(r["path"]) for r in parsed if r["language"]})
+    n_comp = len({component_key(r["path"], roots) for r in parsed if r["language"]})
     log(f"code: {len(parsed)} files, {n_sym} symbols, {n_comp} components")
     return {"files": len(parsed), "symbols": n_sym, "components": n_comp, "source_chars": source_chars}

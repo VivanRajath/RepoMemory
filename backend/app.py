@@ -229,8 +229,9 @@ def api_diff():
 
 
 def _touched_component_uids(project: str, paths: list[str]) -> list[str]:
-    from ingest.code_ingest import component_key
-    return sorted({uid("comp", project, component_key(p)) for p in paths})
+    from ingest.code_ingest import component_key, load_roots
+    roots = load_roots(project)
+    return sorted({uid("comp", project, component_key(p, roots)) for p in paths})
 
 
 @app.get("/api/commit_context")

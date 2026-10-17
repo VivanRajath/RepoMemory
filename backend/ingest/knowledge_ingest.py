@@ -7,6 +7,7 @@ import json
 import os
 import re
 import threading
+import time
 from pathlib import Path
 
 import numpy as np
@@ -86,7 +87,19 @@ def classify(items: list[dict], log=print) -> dict[str, dict]:
                               {"role": "user", "content": json.dumps(payload)}])
                 parsed = json.loads(resp.choices[0].message.content)["commits"]
             except Exception as e:
-                log(f"knowledge: LLM batch failed ({e.__class__.__name__}), heuristic fallback")
+                if "RateLimit" in e.__class__.__name__ and not batch[0].get("retried"):
+                    log("knowledge: rate limited, waiting 20s and retrying this batch")
+                    time.sleep(20)
+                    batch[0]["retried"] = True
+                    try:
+                        resp = litellm.completion(
+                            model=KNOWLEDGE_MODEL, temperature=0, response_format={"type": "json_object"},
+                            messages=[{"role": "system", "content": SYSTEM}, {"role": "user", "content": json.dumps(payload)}])
+                        parsed = json.loads(resp.choices[0].message.content)["commits"]
+                    except Exception as e2:
+                        log(f"knowledge: LLM batch failed again ({e2.__class__.__name__}), heuristic fallback")
+                else:
+                    log(f"knowledge: LLM batch failed ({e.__class__.__name__}), heuristic fallback")
         by_id = {str(p.get("id")): p for p in (parsed or []) if isinstance(p, dict)}
         for it in batch:
             results[it["id"]] = by_id.get(it["id"]) or _heuristic(it)
